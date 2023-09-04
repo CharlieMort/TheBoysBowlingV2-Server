@@ -14,7 +14,9 @@ const connection = mysql.createConnection({
     database: "BoysBowlingDB"
 });
 
-connection.connect();
+connection.connect((err) => {
+    if (err) throw err;
+});
 
 function getValueForBowl(bowl) {
     let bowls = bowl.split("");
@@ -110,7 +112,7 @@ app.get("/players/scores/name/:name", (req, res) => {
 
 // Get All Scores
 app.get("/scores", (req, res) => {
-    connection.query(`SELECT * FROM scores ORDER BY totalScore DESC;`, (err, rows) => {
+    connection.query(`SELECT * FROM scores ORDER BY score DESC;`, (err, rows) => {
         if (err) throw err;
         console.log(rows);
         res.send(rows);
@@ -118,7 +120,7 @@ app.get("/scores", (req, res) => {
 });
 
 app.get("/scores/name", (req, res) => {
-    connection.query(`SELECT scores.*, players.name FROM scores INNER JOIN players ON scores.playerID = players.ID ORDER BY scores.totalScore DESC;`, (err, rows) => {
+    connection.query(`SELECT scores.*, players.name FROM scores INNER JOIN players ON scores.playerID = players.ID ORDER BY scores.score DESC;`, (err, rows) => {
         if (err) throw err;
         console.log(rows);
         res.send(rows);
@@ -133,29 +135,33 @@ app.post("/scores/add", (req, res) => {
             nameID = parseInt(nameResult[0]);
             console.log(nameResult);
             connection.query(`
-                INSERT INTO scores (playerID, scoreString, totalScore, datePlayed, seasonNum, gameNum)
+                INSERT INTO scores (playerID, scoreCard, score, datePlayed, seasonNum, gameNum)
                 VALUES (${nameID}, "${req.body.scoreString}", ${total}, "${req.body.datePlayed}", ${req.body.seasonNum}, ${req.body.gameNum});
             `, (err, result) => {
                 if (err) throw err;
                 console.log("Inserted Score Success");
                 res.send("Added Score");
             })
+            connection.query(`UPDATE players SET totalScore = totalScore + ${total} WHERE ID = ${nameID};`, (err, out) => {
+                if (err) throw err;
+            });
         })
     }
     else {
         nameID = req.body.playerID;
         connection.query(`
-            INSERT INTO scores (playerID, scoreString, totalScore, datePlayed, seasonNum, gameNum)
+            INSERT INTO scores (playerID, scoreCard, score, datePlayed, seasonNum, gameNum)
             VALUES (${nameID}, "${req.body.scoreString}", ${total}, "${req.body.datePlayed}", ${req.body.seasonNum}, ${req.body.gameNum});
         `, (err, result) => {
             if (err) throw err;
             console.log("Inserted Score Success");
             res.send("Added Score");
+            connection.query(`UPDATE players SET totalScore = totalScore + ${total} WHERE ID = ${nameID};`, (err, out) => {
+                if (err) throw err;
+            });
         })
     }
-    connection.query(`UPDATE players SET totalScore = totalScore + ${total};`, (err, out) => {
-        if (err) throw err;
-    });
+    
 })
 
 // Get Single ScoreCard Based On Given ID
