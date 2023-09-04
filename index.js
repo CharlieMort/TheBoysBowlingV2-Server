@@ -1,11 +1,27 @@
 const mysql = require("mysql");
 const express =  require("express");
+const http = require("http");
+const https = require("https");
+const fs =  require("fs");
 const app = express();
 const cors = require("cors");
 const PORT = process.env.PORT | 8000;
 
 app.use(express.json());
 app.use(cors());
+
+const dev = true;
+if (!dev) {
+    const privateKey = fs.readFileSync("/etc/letsencrypt/live/theboysbowling.co.uk/privkey.pem", "utf-8");
+    const certificate = fs.readFileSync("/etc/letsencrypt/live/theboysbowling.co.uk/cert.pem", "utf-8");
+    const ca = fs.readFileSync("/etc/letsencrypt/live/theboysbowling.co.uk/chain.pem", "utf-8");
+
+    const credentials = {
+        key: privateKey,
+        cert: certificate,
+        ca: ca
+    }
+}
 
 const connection = mysql.createConnection({
     host: "localhost",
@@ -173,8 +189,15 @@ app.get("/scores/:id", (req, res) => {
     });
 });
 
-
-
-app.listen(PORT, () => {
-    console.log(`Server Listening On Port:${PORT}`);
-})
+if (dev) {
+    const httpServer = http.createServer(app);
+    httpServer.listen(PORT, () => {
+        console.log(`HTTP server listening on port: ${PORT}`);
+    })
+}
+else {
+    const httpsServer= https.createServer(credentials, app);
+    httpsServer.listen(PORT, () => {
+        console.log(`HTTPS server listening on port: ${PORT}`);
+    })
+}
