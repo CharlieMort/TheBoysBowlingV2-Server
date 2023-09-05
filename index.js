@@ -1,4 +1,4 @@
-const mysql = require("mysql");
+const mysql = require("mysql2");
 const express =  require("express");
 const http = require("http");
 const https = require("https");
@@ -11,12 +11,13 @@ app.use(express.json());
 app.use(cors());
 
 const dev = true;
+let certificate = {};
 if (!dev) {
     const privateKey = fs.readFileSync("/etc/letsencrypt/live/theboysbowling.co.uk/privkey.pem", "utf-8");
     const certificate = fs.readFileSync("/etc/letsencrypt/live/theboysbowling.co.uk/cert.pem", "utf-8");
     const ca = fs.readFileSync("/etc/letsencrypt/live/theboysbowling.co.uk/chain.pem", "utf-8");
 
-    const credentials = {
+    credentials = {
         key: privateKey,
         cert: certificate,
         ca: ca
@@ -148,7 +149,7 @@ app.post("/scores/add", (req, res) => {
     let nameID = -1;
     if (req.body.playerName != undefined) {
         connection.query(`SELECT ID FROM players WHERE name = "${req.body.playerName}";`, (err, nameResult) => {
-            nameID = parseInt(nameResult[0]);
+            nameID = nameResult[0].ID;
             console.log(nameResult);
             connection.query(`
                 INSERT INTO scores (playerID, scoreCard, score, datePlayed, seasonNum, gameNum)
@@ -188,6 +189,65 @@ app.get("/scores/:id", (req, res) => {
         res.send(rows);
     });
 });
+
+app.get("/bowls-thrown" , (req, res) => {
+    connection.query(`SELECT scoreCard FROM scores;`, (err, rows) => {
+        if (err) throw err;
+        let total = 0;
+        rows.map((scoreCard) => {
+            scoreCard = scoreCard.scoreCard.split(".");
+            total += scoreCard.length;
+        })
+        console.log(total);
+        res.send({total:total});
+    })
+})
+
+app.get("/strikes", (req, res) => {
+    connection.query(`SELECT scoreCard FROM scores;`, (err, rows) => {
+        if (err) throw err;
+        let total = 0;
+        rows.map((scoreCard) => {
+            scoreCard = scoreCard.scoreCard.split(".");
+            scoreCard.map((bowl) => {
+                if (bowl == "X") total ++;
+            })
+        })
+        console.log(total);
+        res.send({total:total});
+    })
+})
+
+app.get("/spares", (req, res) => {
+    connection.query(`SELECT scoreCard FROM scores;`, (err, rows) => {
+        if (err) throw err;
+        let total = 0;
+        rows.map((scoreCard) => {
+            scoreCard = scoreCard.scoreCard.split(".");
+            scoreCard.map((bowl) => {
+                if (bowl.length > 1) {
+                    if (bowl[1] == "/") total ++;
+                }
+            });
+        })
+        console.log(total);
+        res.send({total: total});
+    });
+})
+
+app.get("/best-games", (req, res) => {
+    connection.query(`SELECT players.name, scores.score FROM scores INNER JOIN players ON players.ID = scores.playerID ORDER BY scores.score DESC LIMIT 3;`, (err, rows) => {
+        if (err) throw err;
+        res.send(rows);
+    })
+})
+
+app.get("/worst-games", (req, res) => {
+    connection.query(`SELECT players.name, scores.score FROM scores INNER JOIN players ON players.ID = scores.playerID ORDER BY scores.score ASC LIMIT 3;`, (err, rows) => {
+        if (err) throw err;
+        res.send(rows);
+    })
+})
 
 if (dev) {
     const httpServer = http.createServer(app);
