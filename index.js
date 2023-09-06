@@ -87,9 +87,9 @@ function calculateBowl(scoreCard) {
 
 // Get All Players
 app.get("/players", (req, res) => {
+    console.log(req.headers['x-forwarded-for'] || req.socket.remoteAddress );
     connection.query(`SELECT * FROM players ORDER BY totalScore DESC;`, (err, rows) => {
         if (err) throw err;
-        console.log(rows);
         res.send(rows);
     })
 });
@@ -98,7 +98,6 @@ app.get("/players", (req, res) => {
 app.get("/players/:id", (req, res) => {
     connection.query(`SELECT * FROM players WHERE ID = ${req.params.id};`, (err, rows) => {
         if (err) throw err;
-        console.log(rows);
         res.send(rows);
     })
 });
@@ -106,7 +105,6 @@ app.get("/players/:id", (req, res) => {
 app.post("/players/add", (req, res) => {
     connection.query(`INSERT INTO players (name) VALUES ("${req.body.name}");`, (err, result) => {
         if (err) throw err;
-        console.log("Inserted Into Players Success");
         res.send("Success");
     });
 })
@@ -114,7 +112,6 @@ app.post("/players/add", (req, res) => {
 app.get("/players/scores/:id", (req, res) => {
     connection.query(`SELECT * FROM scores WHERE playerID = ${req.params.id};`, (err, rows) => {
         if (err) throw err;
-        console.log(rows);
         res.send(rows);
     })
 })
@@ -122,7 +119,6 @@ app.get("/players/scores/:id", (req, res) => {
 app.get("/players/scores/name/:name", (req, res) => {
     connection.query(`SELECT scores.* FROM scores INNER JOIN players ON players.ID = scores.playerID WHERE players.name = "${req.params.name}"`, (err, rows) => {
         if (err) throw err;
-        console.log(rows);
         res.send(rows);
     })
 })
@@ -131,7 +127,6 @@ app.get("/players/scores/name/:name", (req, res) => {
 app.get("/scores", (req, res) => {
     connection.query(`SELECT * FROM scores ORDER BY score DESC;`, (err, rows) => {
         if (err) throw err;
-        console.log(rows);
         res.send(rows);
     })
 });
@@ -139,7 +134,6 @@ app.get("/scores", (req, res) => {
 app.get("/scores/name", (req, res) => {
     connection.query(`SELECT scores.*, players.name FROM scores INNER JOIN players ON scores.playerID = players.ID ORDER BY scores.score DESC;`, (err, rows) => {
         if (err) throw err;
-        console.log(rows);
         res.send(rows);
     })
 })
@@ -150,13 +144,11 @@ app.post("/scores/add", (req, res) => {
     if (req.body.playerName != undefined) {
         connection.query(`SELECT ID FROM players WHERE name = "${req.body.playerName}";`, (err, nameResult) => {
             nameID = nameResult[0].ID;
-            console.log(nameResult);
             connection.query(`
                 INSERT INTO scores (playerID, scoreCard, score, datePlayed, seasonNum, gameNum)
                 VALUES (${nameID}, "${req.body.scoreString}", ${total}, "${req.body.datePlayed}", ${req.body.seasonNum}, ${req.body.gameNum});
             `, (err, result) => {
                 if (err) throw err;
-                console.log("Inserted Score Success");
                 res.send("Added Score");
             })
             connection.query(`UPDATE players SET totalScore = totalScore + ${total} WHERE ID = ${nameID};`, (err, out) => {
@@ -171,7 +163,6 @@ app.post("/scores/add", (req, res) => {
             VALUES (${nameID}, "${req.body.scoreString}", ${total}, "${req.body.datePlayed}", ${req.body.seasonNum}, ${req.body.gameNum});
         `, (err, result) => {
             if (err) throw err;
-            console.log("Inserted Score Success");
             res.send("Added Score");
             connection.query(`UPDATE players SET totalScore = totalScore + ${total} WHERE ID = ${nameID};`, (err, out) => {
                 if (err) throw err;
@@ -185,7 +176,6 @@ app.post("/scores/add", (req, res) => {
 app.get("/scores/:id", (req, res) => {
     connection.query(`SELECT * FROM scores WHERE ID = ${req.params.id};`, (err, rows) => {
         if (err) throw err;
-        console.log(rows);
         res.send(rows);
     });
 });
@@ -198,8 +188,81 @@ app.get("/bowls-thrown" , (req, res) => {
             scoreCard = scoreCard.scoreCard.split(".");
             total += scoreCard.length;
         })
-        console.log(total);
         res.send({total:total});
+    })
+})
+
+function getTop3(players) {
+    let out = [{name:"N/A", total:0},{name:"N/A", total:0},{name:"N/A", total:0}];
+    for(let player in players) {
+        if (players[player] > out[0].total) {
+            out[1].name = out[0].name;
+            out[1].total = out[0].total;
+            out[0].name = player;
+            out[0].total = players[player];
+        }
+        else if (players[player] > out[1].total) {
+            out[2].name = out[1].name;
+            out[2].total = out[1].total;
+            out[1].name = player;
+            out[1].total = players[player];
+        }
+        else if (players[player] > out[2].total) {
+            out[2].name = player;
+            out[2].total = players[player];
+        }
+    }
+    return out;
+}
+
+app.get("/strikes/rank", (req, res) => {
+    connection.query(`SELECT players.name, scores.scoreCard FROM scores INNER JOIN players ON players.ID = scores.playerID;`, (err, rows) => {
+        if (err) throw err;
+        let players = {};
+        rows.map((row) => {
+            if (players[row.name] == undefined) players[row.name] = 0;
+            let row2 = row.scoreCard.split(".");
+            row2.map((bowl) => {
+                if (bowl == "X") players[row.name] ++;
+            })
+        })
+        res.send(getTop3(players));
+    })
+})
+
+app.get("/spares/rank", (req, res) => {
+    connection.query(`SELECT players.name, scores.scoreCard FROM scores INNER JOIN players ON players.ID = scores.playerID;`, (err, rows) => {
+        if (err) throw err;
+        let players = {};
+        rows.map((row) => {
+            if (players[row.name] == undefined) players[row.name] = 0;
+            let row2 = row.scoreCard.split(".");
+            row2.map((bowl) => {
+                if (bowl.length > 1) {
+                    if (bowl[1] == "/") players[row.name] ++;
+                }
+            });
+        })
+        res.send(getTop3(players));
+    })
+})
+
+app.get("/gutters/rank", (req, res) => {
+    connection.query(`SELECT players.name, scores.scoreCard FROM scores INNER JOIN players ON players.ID = scores.playerID;`, (err, rows) => {
+        if (err) throw err;
+        let players = {};
+        rows.map((row) => {
+            if (players[row.name] == undefined) players[row.name] = 0;
+            let row2 = row.scoreCard.split(".");
+            row2.map((bowl) => {
+                if (bowl.length > 1) {
+                    if (bowl[0] == "-") players[row.name] ++;
+                    if (bowl[1] == "-") players[row.name] ++;
+                    if (bowl.length > 2) if (bowl[2] == "-") players[row.name] ++;
+                }
+            });
+        })
+        res.send(getTop3(players));
     })
 })
 
@@ -213,7 +276,6 @@ app.get("/strikes", (req, res) => {
                 if (bowl == "X") total ++;
             })
         })
-        console.log(total);
         res.send({total:total});
     })
 })
@@ -230,7 +292,23 @@ app.get("/spares", (req, res) => {
                 }
             });
         })
-        console.log(total);
+        res.send({total: total});
+    });
+})
+
+app.get("/gutters", (req, res) => {
+    connection.query(`SELECT scoreCard FROM scores;`, (err, rows) => {
+        if (err) throw err;
+        let total = 0;
+        rows.map((scoreCard) => {
+            scoreCard = scoreCard.scoreCard.split(".");
+            scoreCard.map((bowl) => {
+                if (bowl.length > 1) {
+                    if (bowl[0] == "-") total ++;
+                    if (bowl[1] == "-") total ++;
+                }
+            });
+        })
         res.send({total: total});
     });
 })
