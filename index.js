@@ -24,16 +24,17 @@ if (!dev) {
     }
 }
 
-const connection = mysql.createConnection({
+const connection = mysql.createPool({
+    connectionLimit: 10,
     host: "localhost",
     user: "gerald",
     password: "password",
     database: "BoysBowlingDB"
 });
 
-connection.connect((err) => {
-    if (err) throw err;
-});
+// connection.connect((err) => {
+//     if (err) throw err;
+// });
 
 function getValueForBowl(bowl) {
     let bowls = bowl.split("");
